@@ -182,7 +182,7 @@ contract SwapStableCoin is Ownable, ISwap {
         uint256 sourceChainId,
         uint256 destChainId,
         uint256 amount
-    ) external {
+    ) external returns (uint256 amountOut, uint256 inTokenFee, uint256 outTokenFee) {
         // Validate parameters
         if (tokenIn == address(0) || tokenOut == address(0)) {
             revert Errors.InvalidTokenAddresses(tokenIn, tokenOut);
@@ -237,6 +237,10 @@ contract SwapStableCoin is Ownable, ISwap {
             destChainId,
             amount
         );
+        
+        // Calculate return values
+        amountOut = amount - inTokenFee;
+        outTokenFee = 0; // No out-token fee for cross-chain swaps
         
         emit SwapToOtherChain(tokenIn, tokenOut, msg.sender, to, sourceChainId, destChainId, amount, inTokenFee);
     }
