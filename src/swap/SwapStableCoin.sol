@@ -5,6 +5,7 @@ import "../core/Ownable.sol";
 import "../library/Errors.sol";
 import "../library/FeeLib.sol";
 import "../interface/ISwap.sol";
+import "../interface/IBridgeGateway.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract SwapStableCoin is Ownable, ISwap {
@@ -13,6 +14,7 @@ contract SwapStableCoin is Ownable, ISwap {
     bytes32 private constant FEE_POLICY_SLOT = keccak256("SwapStableCoin_fee_policy");
     bytes32 private constant IN_TOKEN_FEE_SLOT = keccak256("SwapStableCoin_in_token_fee");
     bytes32 private constant OUT_TOKEN_FEE_SLOT = keccak256("SwapStableCoin_out_token_fee");
+    bytes32 private constant BRIDGE_GATEWAY_SLOT = keccak256("SwapStableCoin_bridge_gateway");
     
     constructor() {
         // Store owner address in custom storage slot
@@ -61,6 +63,20 @@ contract SwapStableCoin is Ownable, ISwap {
         emit TokenPairFeesSet(token0, token1, inTokenFee, outTokenFee);
         emit TokenPairFeesSet(token1, token0, outTokenFee, inTokenFee);
     }
+    
+    /**
+     * @dev Set bridge gateway address (only owner)
+     * @param _bridgeGateway New bridge gateway address
+     */
+    function setBridgeGateway(address _bridgeGateway) external onlyOwner(OWNER_SLOT) {
+        if (_bridgeGateway == address(0)) revert Errors.InvalidAddress(_bridgeGateway);
+        
+        assembly {
+            sstore(BRIDGE_GATEWAY_SLOT, _bridgeGateway)
+        }
+        
+        emit BridgeGatewaySet(_bridgeGateway);
+    }
 
     
     /**
@@ -102,11 +118,12 @@ contract SwapStableCoin is Ownable, ISwap {
      * @param tokenIn Input token address
      * @param tokenOut Output token address
      * @param amountIn Amount of input tokens to swap
+     * @param to Address to receive the output tokens
      * @return amountOut Output amount after fees
      * @return inTokenFee Fee amount for input token
      * @return outTokenFee Fee amount for output token
      */
-    function swap(address tokenIn, address tokenOut, uint256 amountIn) external override returns (uint256 amountOut, uint256 inTokenFee, uint256 outTokenFee) {
+    function swap(address tokenIn, address tokenOut, uint256 amountIn, address to) external override returns (uint256 amountOut, uint256 inTokenFee, uint256 outTokenFee) {
         if (tokenIn == address(0) || tokenOut == address(0)) {
             revert Errors.InvalidTokenAddresses(tokenIn, tokenOut);
         }
@@ -143,12 +160,98 @@ contract SwapStableCoin is Ownable, ISwap {
         // Transfer input tokens from user to contract
         IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
         
-        // Transfer output tokens from contract to user
-        IERC20(tokenOut).transfer(msg.sender, amountOut);
+        // Transfer output tokens from contract to specified address
+        IERC20(tokenOut).transfer(to, amountOut);
         
         emit SwapExecuted(tokenIn, tokenOut, amountIn, amountOut, inTokenFee + outTokenFee);
     }
     
+    /**
+     * @dev Swap tokens to other chain through bridge gateway
+     * @param tokenIn Input token address
+     * @param tokenOut Output token address
+     * @param to Destination address
+     * @param sourceChainId Source chain ID
+     * @param destChainId Destination chain ID
+     * @param amount Amount of tokens to bridge
+     */
+    function swapToOtherChain(
+        address tokenIn,
+        address tokenOut,
+        address to,
+        uint256 sourceChainId,
+        uint256 destChainId,
+        uint256 amount
+    ) external {
+        // Validate parameters
+        if (tokenIn == address(0) || tokenOut == address(0)) {
+            revert Errors.InvalidTokenAddresses(tokenIn, tokenOut);
+        }
+        if (to == address(0)) {
+            revert Errors.InvalidAddress(to);
+        }
+        if (amount == 0) {
+            revert Errors.InvalidAmount(amount);
+        }
+        
+        // Get bridge gateway address
+        address bridgeGateway;
+        assembly {
+            bridgeGateway := sload(BRIDGE_GATEWAY_SLOT)
+        }
+        
+        if (bridgeGateway == address(0)) {
+            revert Errors.BridgeGatewayNotSet();
+        }
+        
+        // Calculate and collect in-token fee
+        bytes32 feeSlot = keccak256(abi.encodePacked(FEE_POLICY_SLOT, tokenIn, tokenOut));
+        FeeLib.FeeInfo memory feeInfo;
+        
+        assembly {
+            feeInfo := sload(feeSlot)
+        }
+        
+        uint256 inTokenFee = (amount * feeInfo.inTokenFee) / 1e18;
+        
+        // Transfer tokens from user to this contract
+        IERC20(tokenIn).transferFrom(msg.sender, address(this), amount);
+        
+        // Transfer fee amount to fee collection
+        if (inTokenFee > 0) {
+            // Accumulate in-token fees
+            bytes32 inTokenFeeSlot = keccak256(abi.encodePacked(IN_TOKEN_FEE_SLOT, tokenIn, tokenOut));
+            FeeLib.addToTotalFee(inTokenFeeSlot, inTokenFee);
+        }
+        
+        // Approve bridge gateway to spend the full amount
+        IERC20(tokenIn).approve(bridgeGateway, amount);
+        
+        // Call bridge gateway exit function
+        IBridgeGateway(bridgeGateway).exit(
+            tokenIn,
+            tokenOut,
+            msg.sender,
+            to,
+            sourceChainId,
+            destChainId,
+            amount
+        );
+        
+        emit SwapToOtherChain(tokenIn, tokenOut, msg.sender, to, sourceChainId, destChainId, amount, inTokenFee);
+    }
+    
     event TokenPairFeesSet(address indexed tokenIn, address indexed tokenOut, uint256 inTokenFee, uint256 outTokenFee);
     event SwapExecuted(address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut, uint256 totalFees);
+    event BridgeGatewaySet(address indexed bridgeGateway);
+    event SwapToOtherChain(
+        address indexed tokenIn,
+        address indexed tokenOut,
+        address indexed from,
+        address to,
+        uint256 sourceChainId,
+        uint256 destChainId,
+        uint256 amount,
+        uint256 inTokenFee
+    );
 }
