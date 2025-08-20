@@ -11,4 +11,7 @@ library Errors {
     error InvalidChainId(uint256 currentChainId, uint256 expectedChainId);
     error InvalidVaultAddress(address vault);
     error BridgeGatewayNotSet();
+    error NotAllowed(address addr);
+    error InsufficientReserve(address token, uint256 reserve, uint256 amount); // 0xf421e628
+    error InsufficientTotalStakedAmount(uint256 currentTotal, uint256 amount);
 }

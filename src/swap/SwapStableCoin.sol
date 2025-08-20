@@ -11,9 +11,8 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract SwapStableCoin is Ownable, ISwap {
     // ============ Storage Slots ============
     bytes32 private constant OWNER_SLOT = keccak256("SwapStableCoin_owner_role");
+    bytes32 private constant RESERVE_SLOT = keccak256("SwapStableCoin_reserve");
     bytes32 private constant FEE_POLICY_SLOT = keccak256("SwapStableCoin_fee_policy");
-    bytes32 private constant IN_TOKEN_FEE_SLOT = keccak256("SwapStableCoin_in_token_fee");
-    bytes32 private constant OUT_TOKEN_FEE_SLOT = keccak256("SwapStableCoin_out_token_fee");
     bytes32 private constant BRIDGE_GATEWAY_SLOT = keccak256("SwapStableCoin_bridge_gateway");
     
     constructor() {
@@ -70,9 +69,9 @@ contract SwapStableCoin is Ownable, ISwap {
      */
     function setBridgeGateway(address _bridgeGateway) external onlyOwner(OWNER_SLOT) {
         if (_bridgeGateway == address(0)) revert Errors.InvalidAddress(_bridgeGateway);
-        
+        bytes32 bridgeGatewaySlot = BRIDGE_GATEWAY_SLOT;
         assembly {
-            sstore(BRIDGE_GATEWAY_SLOT, _bridgeGateway)
+            sstore(bridgeGatewaySlot, _bridgeGateway)
         }
         
         emit BridgeGatewaySet(_bridgeGateway);
@@ -83,34 +82,14 @@ contract SwapStableCoin is Ownable, ISwap {
      * @dev Get total accumulated fees for a token pair
      * @param token0 First token address
      * @param token1 Second token address
-     * @return inTokenFee0to1 Total accumulated in-token fees for token0 -> token1 direction
-     * @return outTokenFee0to1 Total accumulated out-token fees for token0 -> token1 direction
-     * @return inTokenFee1to0 Total accumulated in-token fees for token1 -> token0 direction
-     * @return outTokenFee1to0 Total accumulated out-token fees for token1 -> token0 direction
+     * @return token0Fee Total accumulated fees for token0
+     * @return token1Fee Total accumulated fees for token1
      */
     function getTotalFees(address token0, address token1) external view override returns (
-        uint256 inTokenFee0to1, 
-        uint256 outTokenFee0to1, 
-        uint256 inTokenFee1to0, 
-        uint256 outTokenFee1to0
-    ) {
-        // Get in-token fees for token0 -> token1 direction
-        bytes32 inSlot0to1 = keccak256(abi.encodePacked(IN_TOKEN_FEE_SLOT, token0, token1));
-        inTokenFee0to1 = FeeLib.getTotalFee(inSlot0to1);
-        
-        // Get out-token fees for token0 -> token1 direction
-        bytes32 outSlot0to1 = keccak256(abi.encodePacked(OUT_TOKEN_FEE_SLOT, token0, token1));
-        outTokenFee0to1 = FeeLib.getTotalFee(outSlot0to1);
-        
-        // Get in-token fees for token1 -> token0 direction
-        bytes32 inSlot1to0 = keccak256(abi.encodePacked(IN_TOKEN_FEE_SLOT, token1, token0));
-        inTokenFee1to0 = FeeLib.getTotalFee(inSlot1to0);
-        
-        // Get out-token fees for token1 -> token0 direction
-        bytes32 outSlot1to0 = keccak256(abi.encodePacked(OUT_TOKEN_FEE_SLOT, token1, token0));
-        outTokenFee1to0 = FeeLib.getTotalFee(outSlot1to0);
-        
-        return (inTokenFee0to1, outTokenFee0to1, inTokenFee1to0, outTokenFee1to0);
+        uint256 token0Fee, 
+        uint256 token1Fee
+    ) { 
+        return (FeeLib.getTotalFee(FeeLib.getTokenFeeSlot(token0)),FeeLib.getTotalFee(FeeLib.getTokenFeeSlot(token1)));
     }
     
     /**
@@ -149,13 +128,30 @@ contract SwapStableCoin is Ownable, ISwap {
         // Calculate output amount (1:1 ratio minus fees)
         amountOut = amountIn - outTokenFee;
         
-        // Accumulate in-token fees for this direction
-        bytes32 inTokenFeeSlot = keccak256(abi.encodePacked(IN_TOKEN_FEE_SLOT, tokenIn, tokenOut));
-        FeeLib.addToTotalFee(inTokenFeeSlot, inTokenFee);
+        // Accumulate fees for this 
+        FeeLib.addToTotalFee(FeeLib.getTokenFeeSlot(tokenIn), inTokenFee);
+        FeeLib.addToTotalFee(FeeLib.getTokenFeeSlot(tokenOut), outTokenFee);
+
+        bytes32 inTokenReserveSlot = keccak256(abi.encodePacked(RESERVE_SLOT, tokenIn));
+        bytes32 outTokenReserveSlot = keccak256(abi.encodePacked(RESERVE_SLOT, tokenOut));
         
-        // Accumulate out-token fees for this direction
-        bytes32 outTokenFeeSlot = keccak256(abi.encodePacked(OUT_TOKEN_FEE_SLOT, tokenIn, tokenOut));
-        FeeLib.addToTotalFee(outTokenFeeSlot, outTokenFee);
+        assembly {
+            let inReserve := sload(inTokenReserveSlot)
+            let outReserve := sload(outTokenReserveSlot)
+            
+            sstore(inTokenReserveSlot, add(inReserve, amountIn))
+            switch lt(outReserve, amountOut)
+            case true {
+                mstore(0, 0xf421e628)   // Errors.InsufficientReserve.selector
+                mstore(4, tokenOut)
+                mstore(36, outReserve)
+                mstore(68, amountOut)
+                revert(0, 100)
+            }
+            case false {
+                sstore(outTokenReserveSlot, sub(outReserve, amountOut))
+            }
+        }
         
         // Transfer input tokens from user to contract
         IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
@@ -196,8 +192,9 @@ contract SwapStableCoin is Ownable, ISwap {
         
         // Get bridge gateway address
         address bridgeGateway;
+        bytes32 bridgeGatewaySlot = BRIDGE_GATEWAY_SLOT;
         assembly {
-            bridgeGateway := sload(BRIDGE_GATEWAY_SLOT)
+            bridgeGateway := sload(bridgeGatewaySlot)
         }
         
         if (bridgeGateway == address(0)) {
@@ -212,7 +209,7 @@ contract SwapStableCoin is Ownable, ISwap {
             feeInfo := sload(feeSlot)
         }
         
-        uint256 inTokenFee = (amount * feeInfo.inTokenFee) / 1e18;
+        inTokenFee = (amount * feeInfo.inTokenFee) / 1e18;
         
         // Transfer tokens from user to this contract
         IERC20(tokenIn).transferFrom(msg.sender, address(this), amount);
@@ -220,8 +217,13 @@ contract SwapStableCoin is Ownable, ISwap {
         // Transfer fee amount to fee collection
         if (inTokenFee > 0) {
             // Accumulate in-token fees
-            bytes32 inTokenFeeSlot = keccak256(abi.encodePacked(IN_TOKEN_FEE_SLOT, tokenIn, tokenOut));
-            FeeLib.addToTotalFee(inTokenFeeSlot, inTokenFee);
+            FeeLib.addToTotalFee(FeeLib.getTokenFeeSlot(tokenIn), inTokenFee);
+        }
+
+        bytes32 inTokenReserveSlot = keccak256(abi.encodePacked(RESERVE_SLOT, tokenIn));
+        assembly {
+            let inReserve := sload(inTokenReserveSlot)
+            sstore(inTokenReserveSlot, add(inReserve, amount))
         }
         
         // Approve bridge gateway to spend the full amount

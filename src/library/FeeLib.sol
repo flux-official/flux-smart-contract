@@ -2,6 +2,9 @@
 pragma solidity 0.8.30;
 
 library FeeLib {
+    // Storage slot for token fees
+    bytes32 private constant TOKEN_FEE_SLOT = keccak256("FeeLib_token_fee");
+    
     // Struct for fee information (matching SwapStableCoin)
     struct FeeInfo {
         uint256 inTokenFee;    // Fee for input token (in basis points, e.g., 30 = 0.3%)
@@ -59,5 +62,14 @@ library FeeLib {
      */
     function resetTotalFee(bytes32 storageSlot) internal {
         setTotalFee(storageSlot, 0);
+    }
+    
+    /**
+     * @dev Get token fee slot for a specific token pair
+     * @param token  token address
+     * @return Storage slot for the token pair fees
+     */
+    function getTokenFeeSlot(address token) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(TOKEN_FEE_SLOT, token));
     }
 }

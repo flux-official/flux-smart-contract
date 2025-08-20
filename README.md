@@ -19,6 +19,10 @@ src/
 ├── library/        # Libraries and error definitions
 │   ├── Errors.sol
 │   └── FeeLib.sol
+├── mock/           # Mock contracts for testing
+│   ├── MockToken1.sol
+│   ├── MockToken2.sol
+│   └── MockToken3.sol
 ├── stake/          # Staking related contracts
 │   └── Stake.sol
 ├── swap/           # Swap related contracts
@@ -34,6 +38,22 @@ src/
 - **Bridge Gateway**: Cross-chain bridging functionality
 - **Vault**: Secure token storage and management
 - **Swap System**: Token swapping with fee management
+
+## Mock Contracts
+
+### Mock ERC20 Tokens
+The project includes three mock ERC20 tokens for testing purposes:
+
+- **MockToken1**: Mock token 1 with 18 decimals
+- **MockToken2**: Mock token 2 with 18 decimals  
+- **MockToken3**: Mock token 3 with 18 decimals
+
+Each mock token includes:
+- `mint(address to, uint256 amount)`: Mint new tokens (owner only)
+- `burn(address from, uint256 amount)`: Burn tokens from specific address (owner only)
+- `burn(uint256 amount)`: Burn tokens from caller's address
+- Standard ERC20 functionality
+- All tokens use 18 decimals for consistency
 
 ## Interfaces
 
@@ -71,6 +91,91 @@ src/
   - `stake(address token, uint256 amount)`: Stakes tokens
   - `unstake(address token, uint256 amount)`: Unstakes tokens
   - `claimRewards(address token)`: Claims staking rewards
+
+## Stake Contract Functions
+
+The `Stake` contract implements a comprehensive staking system with the following functions:
+
+### State Changing Functions (External)
+- **`stake(address token, uint256 amount)`**: 
+  - Stakes the specified amount of tokens from the caller
+  - Automatically claims any pending rewards before adding new stake
+  - Updates total and user staked amounts for the token
+
+- **`unstake(address token, uint256 amount)`**: 
+  - Unstakes the specified amount of tokens back to the caller
+  - Automatically claims any pending rewards before reducing stake
+  - Requires sufficient staked amount, updates total and user staked amounts
+
+- **`claimRewards(address token)`**: 
+  - Manually claims pending rewards for the caller
+  - Calculates rewards based on current stake and accumulated K rewards
+  - Transfers reward tokens to the caller and updates claimed amounts
+
+### View Functions for Stake Information (Public)
+- **`getTotalStakedAmount(address token)`**: 
+  - Returns the total amount of tokens staked for a specific token
+  - Used for calculating overall staking pool size
+
+- **`getUserStakedAmount(address user, address token)`**: 
+  - Returns the amount of tokens staked by a specific user for a specific token
+  - Used for calculating individual user's stake
+
+### View Functions for Mining and Rewards (Public)
+- **`getLastMineAmount(address token)`**: 
+  - Returns the last recorded mining amount for a specific token
+  - Used for tracking mining progress and calculating new rewards
+
+- **`getTotalKRewards(address token)`**: 
+  - Returns the total accumulated K rewards for a specific token
+  - Represents the overall reward rate for the staking pool
+
+- **`getUserKRewards(address user, address token)`**: 
+  - Returns the user's accumulated K rewards for a specific token
+  - Used for calculating individual user's reward rate
+
+### View Functions for Claimed Amounts (Public)
+- **`getTotalClaimedAmount(address token)`**: 
+  - Returns the total amount of rewards claimed by all users for a specific token
+  - Used for tracking overall reward distribution
+
+- **`getUserClaimedAmount(address user, address token)`**: 
+  - Returns the amount of rewards claimed by a specific user for a specific token
+  - Used for tracking individual user's reward history
+
+### View Functions for Share and Pending Rewards (Public)
+- **`getUserSharePercentage(address user, address token)`**: 
+  - Returns the user's current share percentage of the total staking pool
+  - Returns value in basis points (1e18 = 100%)
+  - Used for understanding user's stake proportion
+
+- **`getPendingRewards(address user, address token)`**: 
+  - Returns the amount of pending rewards for a specific user and token
+  - Calculates rewards based on current K rewards and user's stake
+  - Used for displaying unclaimed rewards to users
+
+### Utility Functions (Public)
+- **`verifyStakeConsistency(address token)`**: 
+  - Verifies the consistency of stake data for a specific token
+  - Returns true if the total staked amount is valid
+  - Used for data integrity validation
+
+## Staking Mechanism
+
+The staking system uses a **K-factor based reward distribution** mechanism:
+
+1. **K Calculation**: `K = (totalMined - lastMineAmount) * 1e18 / totalStakedAmount`
+2. **User Rewards**: `userRewards = (currentK - userK) * userStakedAmount / 1e18`
+3. **Automatic Claiming**: Rewards are automatically claimed during stake/unstake operations
+4. **Proportional Distribution**: Rewards are distributed proportionally to each user's stake
+
+## Key Features
+
+- **Automatic Reward Claiming**: Rewards are automatically processed during stake/unstake
+- **Proportional Reward Distribution**: Users receive rewards proportional to their stake
+- **Comprehensive Tracking**: All stake amounts, rewards, and claims are tracked per token and user
+- **Gas Efficient**: Uses assembly for storage operations and optimized calculations
+- **Security**: Input validation and proper access control for all operations
 
 ## Tech Stack
 

@@ -5,9 +5,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../interface/ISwap.sol";
-import "../library/Errors.sol";
 import "../interface/IBridgeGateway.sol";
-import "../bridge/Vault.sol";
+import "./Vault.sol";
 
 contract BridgeGateway is Ownable {
     // Immutable public variables

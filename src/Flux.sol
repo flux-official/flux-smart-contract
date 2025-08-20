@@ -4,6 +4,8 @@ pragma solidity 0.8.30;
 import "./core/FluxBase.sol";
 
 contract Flux is FluxBase {
+    constructor(address _stakeImplementation, address _swapImplementation) FluxBase(_stakeImplementation, _swapImplementation) {}
+    
     fallback() external {
         address implementation = _getImplementation(msg.sig);
         
