@@ -96,6 +96,19 @@ Flux is a project that implements an upgradeable smart contract proxy pattern.
 | Vault | `0xe7261b77b2095e3fb78970bc8b1f4d6ab6b3ede6` |
 | BridgeGateway | `0x0b6dadd958a84cb6c96e6306f38d2224c3ecbf7d` |
 
+## Sepolia Testnet Contracts
+
+| Contract | Address |
+|----------|---------|
+| MockToken1 | `0xadb14d6652d41064def81e671e37418c7949c18e` |
+| MockToken2 | `0x3e4389a3b9c64d9e4402ed50db8a950134ac32af` |
+| MockToken3 | `0xccb1454d890f8a377b31139d6eea53d3b630be36` |
+| SwapStableCoin | `0xdb0d180dacea64dedc722c0303f13e74416139a0` |
+| Stake | `0xeb7be9cbed7db332a500a08b2ce78f698dd51236` |
+| Flux | `0xbfccb82422aa6140983ece3d3db5c86fa5bef6a8` |
+| Vault | `0x0b6dadd958a84cb6c96e6306f38d2224c3ecbf7d` |
+| BridgeGateway | `0x78ffd77f5447cc972ba727546c1723db504a8681` |
+
 ## Project Structure
 
 ```
