@@ -14,4 +14,5 @@ library Errors {
     error NotAllowed(address addr);
     error InsufficientReserve(address token, uint256 reserve, uint256 amount); // 0xf421e628
     error InsufficientTotalStakedAmount(uint256 currentTotal, uint256 amount);
+    error InsufficientBalance(address token, uint256 balance, uint256 amount);
 }

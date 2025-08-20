@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import "../interface/ISwap.sol";
 import "../interface/IBridgeGateway.sol";
-import "./Vault.sol";
+import {Errors} from "../library/Errors.sol";
+import {Vault} from "./Vault.sol";
 
 contract BridgeGateway is Ownable {
     // Immutable public variables
@@ -16,7 +16,7 @@ contract BridgeGateway is Ownable {
     // Mapping to store addresses that can request bridging
     mapping(address => bool) public bridgingAllowed;
     
-        // Events
+    // Events
     event BridgingAllowed(address indexed addr, bool allowed);
     event BridgeEnter(
         address indexed tokenIn,

@@ -247,6 +247,50 @@ contract SwapStableCoin is Ownable, ISwap {
         emit SwapToOtherChain(tokenIn, tokenOut, msg.sender, to, sourceChainId, destChainId, amount, inTokenFee);
     }
     
+    /**
+     * @dev Get bridge gateway address from storage
+     * @return Bridge gateway address
+     */
+    function _getBridgeGateway() private view returns (address) {
+        bytes32 slot = BRIDGE_GATEWAY_SLOT;
+        address bridgeGateway;
+        assembly {
+            bridgeGateway := sload(slot)
+        }
+        return bridgeGateway;
+    }
+    
+    /**
+     * @dev Calculate in-token fee for cross-chain swap
+     * @param tokenIn Input token address
+     * @param tokenOut Output token address
+     * @param amount Amount of tokens
+     * @return In-token fee amount
+     */
+    function _calculateInTokenFee(address tokenIn, address tokenOut, uint256 amount) private view returns (uint256) {
+        bytes32 feeSlot = keccak256(abi.encodePacked(FEE_POLICY_SLOT, tokenIn, tokenOut));
+        FeeLib.FeeInfo memory feeInfo;
+        
+        assembly {
+            feeInfo := sload(feeSlot)
+        }
+        
+        return (amount * feeInfo.inTokenFee) / 1e18;
+    }
+    
+    /**
+     * @dev Update reserve for input token
+     * @param tokenIn Input token address
+     * @param amount Amount to add to reserve
+     */
+    function _updateReserve(address tokenIn, uint256 amount) private {
+        bytes32 reserveSlot = keccak256(abi.encodePacked(RESERVE_SLOT, tokenIn));
+        assembly {
+            let currentReserve := sload(reserveSlot)
+            sstore(reserveSlot, add(currentReserve, amount))
+        }
+    }
+    
     event TokenPairFeesSet(address indexed tokenIn, address indexed tokenOut, uint256 inTokenFee, uint256 outTokenFee);
     event SwapExecuted(address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut, uint256 totalFees);
     event BridgeGatewaySet(address indexed bridgeGateway);
