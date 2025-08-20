@@ -2,6 +2,87 @@
 
 Flux is a project that implements an upgradeable smart contract proxy pattern.
 
+## Contract Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        User Request                            │
+│                    (stake, swap, etc.)                        │
+└─────────────────────┬───────────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        Flux.sol                                │
+│                   (Proxy Contract)                             │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │              Function Selector Router                   │   │
+│  │                                                         │   │
+│  │  ┌─────────────────┐  ┌─────────────────────────────┐   │   │
+│  │  │   IStake        │  │        ISwap                │   │   │
+│  │  │   Functions     │  │      Functions              │   │   │
+│  │  │                 │  │                             │   │   │
+│  │  │ • stake()       │  │ • swap()                    │   │   │
+│  │  │ • unstake()     │  │ • swapToOtherChain()        │   │   │
+│  │  │ • claimRewards()│  │ • getTotalFees()            │   │   │
+│  │  │ • getters...    │  │                             │   │   │
+│  │  └─────────────────┘  └─────────────────────────────┘   │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────┬───────────────────────────────────────────┘
+                      │
+                      ▼
+        ┌─────────────────────────────┐
+        │      Implementation         │
+        │        Contracts            │
+        │                             │
+        │  ┌─────────────┐ ┌─────────┴─────────┐
+        │  │   Stake.sol │ │   SwapStableCoin  │
+        │  │             │ │       .sol        │
+        │  │ • Staking   │ │ • Token Swapping  │
+        │  │ • Rewards   │ │ • Fee Management  │
+        │  │ • K-Factor  │ │ • Cross-chain     │
+        │  │   Logic     │ │   Bridging        │
+        │  └─────────────┘ └───────────────────┘
+        └─────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    Vault.sol                                   │
+│              (Token Storage & Security)                        │
+│                                                                 │
+│  • Secure token storage and management                         │
+│  • Access control and security measures                        │
+│  • Deposit and withdrawal operations                           │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                BridgeGateway.sol                               │
+│              (Cross-chain Bridge Logic)                        │
+│                                                                 │
+│  • Cross-chain token bridging                                  │
+│  • Chain ID validation                                         │
+│  • Bridge entry and exit operations                            │
+│  • Integration with external bridge protocols                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### How It Works
+
+1. **User Request**: Users call functions like `stake()`, `swap()`, etc.
+2. **Flux Proxy**: All requests go through `Flux.sol` (the proxy contract)
+3. **Function Routing**: `Flux.sol` examines the function selector (first 4 bytes of calldata)
+4. **Implementation Selection**: Based on the selector, requests are routed to:
+   - **Stake.sol**: For staking-related functions (`stake`, `unstake`, `claimRewards`, etc.)
+   - **SwapStableCoin.sol**: For swapping-related functions (`swap`, `swapToOtherChain`, etc.)
+5. **Execution**: The selected implementation contract executes the requested function
+6. **Response**: Results are returned through the proxy back to the user
+
+### Key Benefits
+
+- **Upgradeability**: Implementation contracts can be upgraded without changing the proxy
+- **Single Entry Point**: Users only need to know one contract address (`Flux.sol`)
+- **Gas Efficiency**: Direct delegation to implementation contracts
+- **Consistent Interface**: All functions are accessible through a unified interface
+
 ## Kaia Testnet Contracts
 
 | Contract | Address |
