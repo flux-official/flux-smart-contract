@@ -4,6 +4,7 @@ pragma solidity 0.8.30;
 import "../core/Ownable.sol";
 import "../library/Errors.sol";
 import "../library/FeeLib.sol";
+import "../library/StakeLib.sol";
 import "../interface/ISwap.sol";
 import "../interface/IBridgeGateway.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -11,7 +12,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract SwapStableCoin is Ownable, ISwap {
     // ============ Storage Slots ============
     bytes32 private constant OWNER_SLOT = keccak256("SwapStableCoin_owner_role");
-    bytes32 private constant RESERVE_SLOT = keccak256("SwapStableCoin_reserve");
     bytes32 private constant FEE_POLICY_SLOT = keccak256("SwapStableCoin_fee_policy");
     bytes32 private constant BRIDGE_GATEWAY_SLOT = keccak256("SwapStableCoin_bridge_gateway");
     
@@ -132,26 +132,17 @@ contract SwapStableCoin is Ownable, ISwap {
         FeeLib.addToTotalFee(FeeLib.getTokenFeeSlot(tokenIn), inTokenFee);
         FeeLib.addToTotalFee(FeeLib.getTokenFeeSlot(tokenOut), outTokenFee);
 
-        bytes32 inTokenReserveSlot = keccak256(abi.encodePacked(RESERVE_SLOT, tokenIn));
-        bytes32 outTokenReserveSlot = keccak256(abi.encodePacked(RESERVE_SLOT, tokenOut));
+        // Get current reserves using StakeLib getter functions
+        uint256 inReserve = StakeLib.getTotalStakedAmount(tokenIn);
+        uint256 outReserve = StakeLib.getTotalStakedAmount(tokenOut);
         
-        assembly {
-            let inReserve := sload(inTokenReserveSlot)
-            let outReserve := sload(outTokenReserveSlot)
-            
-            sstore(inTokenReserveSlot, add(inReserve, amountIn))
-            switch lt(outReserve, amountOut)
-            case true {
-                mstore(0, 0xf421e628)   // Errors.InsufficientReserve.selector
-                mstore(4, tokenOut)
-                mstore(36, outReserve)
-                mstore(68, amountOut)
-                revert(0, 100)
-            }
-            case false {
-                sstore(outTokenReserveSlot, sub(outReserve, amountOut))
-            }
+        // Update reserves using StakeLib setter functions
+        StakeLib.setTotalStakedAmount(tokenIn, inReserve + amountIn);
+        
+        if (outReserve < amountOut) {
+            revert Errors.InsufficientTotalStakedAmount(outReserve, amountOut);
         }
+        StakeLib.setTotalStakedAmount(tokenOut, outReserve - amountOut);
         
         // Transfer input tokens from user to contract
         IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
@@ -220,11 +211,9 @@ contract SwapStableCoin is Ownable, ISwap {
             FeeLib.addToTotalFee(FeeLib.getTokenFeeSlot(tokenIn), inTokenFee);
         }
 
-        bytes32 inTokenReserveSlot = keccak256(abi.encodePacked(RESERVE_SLOT, tokenIn));
-        assembly {
-            let inReserve := sload(inTokenReserveSlot)
-            sstore(inTokenReserveSlot, add(inReserve, amount))
-        }
+        // Update reserve using StakeLib setter function
+        uint256 currentReserve = StakeLib.getTotalStakedAmount(tokenIn);
+        StakeLib.setTotalStakedAmount(tokenIn, currentReserve + amount);
         
         // Approve bridge gateway to spend the full amount
         IERC20(tokenIn).approve(bridgeGateway, amount);
@@ -284,11 +273,8 @@ contract SwapStableCoin is Ownable, ISwap {
      * @param amount Amount to add to reserve
      */
     function _updateReserve(address tokenIn, uint256 amount) private {
-        bytes32 reserveSlot = keccak256(abi.encodePacked(RESERVE_SLOT, tokenIn));
-        assembly {
-            let currentReserve := sload(reserveSlot)
-            sstore(reserveSlot, add(currentReserve, amount))
-        }
+        uint256 currentReserve = StakeLib.getTotalStakedAmount(tokenIn);
+        StakeLib.setTotalStakedAmount(tokenIn, currentReserve + amount);
     }
     
     event TokenPairFeesSet(address indexed tokenIn, address indexed tokenOut, uint256 inTokenFee, uint256 outTokenFee);
