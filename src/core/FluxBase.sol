@@ -74,9 +74,17 @@ contract FluxBase is Ownable {
      */
     function _setSwapImplementations() private {
         // ISwap interface functions
+        // ISwap core functions
         selectorToImplementation[ISwap.swap.selector] = swapImplementation;
         selectorToImplementation[ISwap.getTotalFees.selector] = swapImplementation;
         selectorToImplementation[ISwap.swapToOtherChain.selector] = swapImplementation;
+        
+        // ISwap fee management functions
+        selectorToImplementation[ISwap.setTokenPairFees.selector] = swapImplementation;
+        
+        // ISwap bridge gateway management functions
+        selectorToImplementation[ISwap.setBridgeGateway.selector] = swapImplementation;
+   
     }
     
     /**

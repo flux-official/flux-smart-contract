@@ -4,6 +4,7 @@ pragma solidity 0.8.30;
 library FeeLib {
     // Storage slot for token fees
     bytes32 private constant TOKEN_FEE_SLOT = keccak256("FeeLib_token_fee");
+    uint256 private constant DEFAULT_FEE = 50000000000000000; // 5e16 (5%)
     
     // Struct for fee information (matching SwapStableCoin)
     struct FeeInfo {
@@ -71,5 +72,34 @@ library FeeLib {
      */
     function getTokenFeeSlot(address token) internal pure returns (bytes32) {
         return keccak256(abi.encodePacked(TOKEN_FEE_SLOT, token));
+    }
+
+    /**
+     * @dev Read FeeInfo from an arbitrary storage slot (no defaults applied).
+     * @param storageSlot The base storage slot where FeeInfo is stored
+     * @return feeInfo The FeeInfo exactly as stored
+     */
+    function getFeeInfo(bytes32 storageSlot) internal view returns (FeeInfo memory feeInfo) {
+        uint256 inFee;
+        uint256 outFee;
+        assembly {
+            inFee := sload(storageSlot)
+            outFee := sload(add(storageSlot, 1))
+        }
+        feeInfo = FeeInfo({ inTokenFee: inFee, outTokenFee: outFee });
+    }
+
+    /**
+     * @dev Write FeeInfo into an arbitrary storage slot, normalizing zeros to DEFAULT_FEE.
+     * @param storageSlot The base storage slot where FeeInfo will be stored
+     * @param feeInfo The FeeInfo to store; zero fields will be set to DEFAULT_FEE
+     */
+    function setFeeInfo(bytes32 storageSlot, FeeInfo memory feeInfo) internal {
+        uint256 inFee = feeInfo.inTokenFee == 0 ? DEFAULT_FEE : feeInfo.inTokenFee;
+        uint256 outFee = feeInfo.outTokenFee == 0 ? DEFAULT_FEE : feeInfo.outTokenFee;
+        assembly {
+            sstore(storageSlot, inFee)
+            sstore(add(storageSlot, 1), outFee)
+        }
     }
 }

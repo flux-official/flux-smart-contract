@@ -32,7 +32,7 @@ contract SwapStableCoin is Ownable, ISwap {
         address token1,
         uint256 inTokenFee,
         uint256 outTokenFee
-    ) external onlyOwner(OWNER_SLOT) {
+    ) external override onlyOwner(OWNER_SLOT) {
         if (token0 == address(0) || token1 == address(0)) {
             revert Errors.InvalidTokenAddresses(token0, token1);
         }
@@ -54,10 +54,8 @@ contract SwapStableCoin is Ownable, ISwap {
             outTokenFee: inTokenFee
         });
         
-        assembly {
-            sstore(slot01, feeInfo01)
-            sstore(slot10, feeInfo10)
-        }
+        FeeLib.setFeeInfo(slot01, feeInfo01);
+        FeeLib.setFeeInfo(slot10, feeInfo10);
         
         emit TokenPairFeesSet(token0, token1, inTokenFee, outTokenFee);
         emit TokenPairFeesSet(token1, token0, outTokenFee, inTokenFee);
@@ -67,7 +65,7 @@ contract SwapStableCoin is Ownable, ISwap {
      * @dev Set bridge gateway address (only owner)
      * @param _bridgeGateway New bridge gateway address
      */
-    function setBridgeGateway(address _bridgeGateway) external onlyOwner(OWNER_SLOT) {
+    function setBridgeGateway(address _bridgeGateway) external override onlyOwner(OWNER_SLOT) {
         if (_bridgeGateway == address(0)) revert Errors.InvalidAddress(_bridgeGateway);
         bytes32 bridgeGatewaySlot = BRIDGE_GATEWAY_SLOT;
         assembly {
@@ -115,11 +113,7 @@ contract SwapStableCoin is Ownable, ISwap {
         
         // Get fee information for this token pair
         bytes32 feeSlot = keccak256(abi.encodePacked(FEE_POLICY_SLOT, tokenIn, tokenOut));
-        FeeLib.FeeInfo memory feeInfo;
-        
-        assembly {
-            feeInfo := sload(feeSlot)
-        }
+        FeeLib.FeeInfo memory feeInfo = FeeLib.getFeeInfo(feeSlot);
         
         // Calculate fees
         inTokenFee = (amountIn * feeInfo.inTokenFee) / 1e18;
@@ -182,25 +176,14 @@ contract SwapStableCoin is Ownable, ISwap {
         }
         
         // Get bridge gateway address
-        address bridgeGateway;
-        bytes32 bridgeGatewaySlot = BRIDGE_GATEWAY_SLOT;
-        assembly {
-            bridgeGateway := sload(bridgeGatewaySlot)
-        }
+        address bridgeGateway = _getBridgeGateway();
         
         if (bridgeGateway == address(0)) {
             revert Errors.BridgeGatewayNotSet();
         }
         
         // Calculate and collect in-token fee
-        bytes32 feeSlot = keccak256(abi.encodePacked(FEE_POLICY_SLOT, tokenIn, tokenOut));
-        FeeLib.FeeInfo memory feeInfo;
-        
-        assembly {
-            feeInfo := sload(feeSlot)
-        }
-        
-        inTokenFee = (amount * feeInfo.inTokenFee) / 1e18;
+        inTokenFee = _calculateInTokenFee(tokenIn, tokenOut, amount);
         
         // Transfer tokens from user to this contract
         IERC20(tokenIn).transferFrom(msg.sender, address(this), amount);
@@ -211,9 +194,8 @@ contract SwapStableCoin is Ownable, ISwap {
             FeeLib.addToTotalFee(FeeLib.getTokenFeeSlot(tokenIn), inTokenFee);
         }
 
-        // Update reserve using StakeLib setter function
-        uint256 currentReserve = StakeLib.getTotalStakedAmount(tokenIn);
-        StakeLib.setTotalStakedAmount(tokenIn, currentReserve + amount);
+        // Update reserve using helper
+        _updateReserve(tokenIn, amount);
         
         // Approve bridge gateway to spend the full amount
         IERC20(tokenIn).approve(bridgeGateway, amount);
@@ -258,12 +240,7 @@ contract SwapStableCoin is Ownable, ISwap {
      */
     function _calculateInTokenFee(address tokenIn, address tokenOut, uint256 amount) private view returns (uint256) {
         bytes32 feeSlot = keccak256(abi.encodePacked(FEE_POLICY_SLOT, tokenIn, tokenOut));
-        FeeLib.FeeInfo memory feeInfo;
-        
-        assembly {
-            feeInfo := sload(feeSlot)
-        }
-        
+        FeeLib.FeeInfo memory feeInfo = FeeLib.getFeeInfo(feeSlot);
         return (amount * feeInfo.inTokenFee) / 1e18;
     }
     
