@@ -16,6 +16,9 @@ contract BridgeGateway is Ownable {
     // Mapping to store addresses that can request bridging
     mapping(address => bool) public bridgingAllowed;
     
+    // Mapping: destination chainId => (source token => destination token)
+    mapping(uint256 => mapping(address => address)) public tokenAddressByChain;
+    
     // Events
     event BridgingAllowed(address indexed addr, bool allowed);
     event BridgeEnter(
@@ -36,6 +39,7 @@ contract BridgeGateway is Ownable {
         uint256 destChainId,
         uint256 amount
     );
+    event TokenAddressMapped(uint256 indexed chainId, address indexed srcToken, address indexed mappedToken);
     
     // Modifiers
     modifier onlyAllowed(address addr) {
@@ -91,22 +95,23 @@ contract BridgeGateway is Ownable {
         if (currentChainId != destChainId) {
             revert Errors.InvalidChainId(currentChainId, destChainId);
         }
+
+        address mappedToken = tokenAddressByChain[sourceChainId][tokenIn];
         
-        // Withdraw tokenOut from vault
-        Vault(vault).withdraw(tokenOut, address(this), amount);
+        Vault(vault).withdraw(mappedToken, address(this), amount);
         
         // Call swap function to exchange tokens and send to recipient
         // Note: We need to approve the swap contract to spend our tokens first
-        IERC20(tokenOut).approve(address(flux), amount);
+        IERC20(mappedToken).approve(address(flux), amount);
         
         // Call swap function through Flux proxy
         ISwap(flux).swap(
-            tokenOut,  // tokenIn (we have tokenOut from vault)
+            mappedToken,  // tokenIn (we have tokenOut from vault)
             tokenOut,  // tokenOut (same token for direct transfer)
             amount,    // amountIn
             to         // recipient
         );
-        
+
         emit BridgeEnter(tokenIn, tokenOut, from, to, sourceChainId, destChainId, amount);
     }
     
@@ -163,5 +168,22 @@ contract BridgeGateway is Ownable {
     function setBridgingAllowed(address addr, bool allowed) external onlyOwner {
         bridgingAllowed[addr] = allowed;
         emit BridgingAllowed(addr, allowed);
+    }
+
+    /**
+     * @dev Set mapped token address for a given chainId
+     * @param chainId Destination chain ID
+     * @param srcToken Token address on the current (or reference) chain
+     * @param mappedToken Corresponding token address on the destination chain
+     */
+    function setTokenAddressByChain(
+        uint256 chainId,
+        address srcToken,
+        address mappedToken
+    ) external onlyOwner {
+        if (srcToken == address(0)) revert Errors.InvalidAddress(srcToken);
+        if (mappedToken == address(0)) revert Errors.InvalidAddress(mappedToken);
+        tokenAddressByChain[chainId][srcToken] = mappedToken;
+        emit TokenAddressMapped(chainId, srcToken, mappedToken);
     }
 }

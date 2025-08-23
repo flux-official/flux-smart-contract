@@ -40,10 +40,13 @@ contract Vault is Ownable {
      * @param token Token address to deposit
      * @param amount Amount to deposit
      */
-    function deposit(address token, uint256 amount) external onlyGateway {
+    function deposit(address token, uint256 amount) external {
         if (token == address(0)) revert Errors.InvalidAddress(token);
         if (amount == 0) revert Errors.InvalidAmount(amount);
         
+        // Pull tokens from caller (gateway) into the vault
+        IERC20(token).transferFrom(msg.sender, address(this), amount);
+
         // Update balance
         tokenBalances[token] += amount;
         
