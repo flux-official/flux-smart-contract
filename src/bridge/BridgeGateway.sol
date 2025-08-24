@@ -153,6 +153,8 @@ contract BridgeGateway is Ownable {
         
         // Transfer tokenIn from Flux to this contract
         IERC20(tokenIn).transferFrom(flux, address(this), amount);
+
+        IERC20(tokenIn).approve(vault, amount);
         
         // Deposit tokenIn to vault
         Vault(vault).deposit(tokenIn, amount);
@@ -187,3 +189,5 @@ contract BridgeGateway is Ownable {
         emit TokenAddressMapped(chainId, srcToken, mappedToken);
     }
 }
+
+//0xf2d9f7a9c6ae3d3eee46a0b8878ca1aa55735342
